@@ -42,15 +42,15 @@ class AuthenticationDelegate(DefaultDelegate):
                 self.device.state = AUTH_STATES.AUTH_FAILED
         elif hnd == self.device._char_heart_measure.getHandle():
             self.device.queue.put((QUEUE_TYPES.HEART, data))
-        elif hnd == 0x38:
+        elif hnd == 0x38 or hnd == 0x35:
             # Not sure about this, need test
-            if len(data) == 20 and struct.unpack('b', data[0])[0] == 1:
+            if len(data) == 20 and data[0] == 1:
                 self.device.queue.put((QUEUE_TYPES.RAW_ACCEL, data))
             elif len(data) == 16:
                 self.device.queue.put((QUEUE_TYPES.RAW_HEART, data))
         else:
             self.device._log.error("Unhandled Response " + hex(hnd) + ": " +
-                                   str(data.encode("hex")) + " len:" + str(len(data)))
+                                   str(data) + " len:" + str(len(data)))
 
 
 class MiBand3(Peripheral):
@@ -132,7 +132,7 @@ class MiBand3(Peripheral):
         res = []
         for i in range(3):
             g = struct.unpack('hhh', bytes[2 + i * 6:8 + i * 6])
-            res.append({'x': g[0], 'y': g[1], 'wtf': g[2]})
+            res.append({'x': g[0] / 255 * 9.8, 'y': g[1] / 255 * 9.8, 'z': g[2] / 255 * 9.8})
         return res
 
     def _parse_raw_heart(self, bytes):
@@ -399,7 +399,8 @@ class MiBand3(Peripheral):
                 self.heart_raw_callback = heart_raw_callback
             if accel_raw_callback:
                 self.accel_raw_callback = accel_raw_callback
-
+            char_sensor_m = self.svc_1.getCharacteristics(UUIDS.CHARACTERISTIC_SENSOR_MEASURE)[0]
+            char_sensor_d = char_sensor_m.getDescriptors(forUUID=UUIDS.NOTIFICATION_DESCRIPTOR)[0]
             char_sensor = self.svc_1.getCharacteristics(UUIDS.CHARACTERISTIC_SENSOR)[0]
 
             # stop heart monitor continues & manual
@@ -408,20 +409,22 @@ class MiBand3(Peripheral):
             # WTF
             # char_sens_d1.write(b'\x01\x00', True)
             # enabling accelerometer & heart monitor raw data notifications
-            char_sensor.write(b'\x01\x03\x19')
+            char_sensor.write(b'\x01\x01\x19')
             # IMO: enablee heart monitor notifications
             ##char_d.write(b'\x01\x00', True)
             # start hear monitor continues
             ##char_ctrl.write(b'\x15\x01\x01', True)
             # WTF
             char_sensor.write(b'\x02')
+            char_sensor_d.write(b'\x01\x00')
             t = time.time()
             while True:
-                self.waitForNotifications(0.5)
+                self.waitForNotifications(0.1)
                 self._parse_queue()
-                # send ping request every 12 sec
-                if (time.time() - t) >= 12:
-                    char_ctrl.write(b'\x16', True)
+                # send ping request every 30 sec
+                if (time.time() - t) >= 30:
+                    char_sensor.write(b'\x01\x01\x19')
+                    char_sensor.write(b'\x02')
                     t = time.time()
 
     def stop_realtime(self):

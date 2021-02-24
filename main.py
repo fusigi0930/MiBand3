@@ -40,11 +40,12 @@ def heart_beat():
 
 
 def acc(data):
-	print('yes')
-	print('x: {} y: {} z: {}'.format(data.x, data.y, data.wtf))
+    for acc in data:
+       print('x: {} y: {} z: {}'.format(acc['x'], acc['y'], acc['z']))
+
 
 def raw_data():
-	band.start_raw_data_realtime(heart_measure_callback = None, heart_raw_callback = None, accel_raw_callback = acc)
+	band.start_raw_data_realtime(accel_raw_callback = acc)
 	input('test')
 
 def change_date():
